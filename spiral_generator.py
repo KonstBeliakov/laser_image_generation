@@ -215,6 +215,216 @@ def generate_rectangular_spiral(width, height, num_turns=40, points_per_turn=100
     return points
 
 
+def _point_in_convex_polygon(px, py, vertices):
+    """
+    Проверяет, находится ли точка (px, py) внутри выпуклого многоугольника.
+    vertices — список вершин (x, y) в порядке обхода.
+    """
+    n = len(vertices)
+    for i in range(n):
+        x1, y1 = vertices[i]
+        x2, y2 = vertices[(i + 1) % n]
+        # Векторное произведение: (P - V1) x (V2 - V1)
+        cross = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+        if cross < 0:
+            return False
+    return True
+
+
+def _clip_line_to_polygon(x1, y1, x2, y2, vertices):
+    """
+    Обрезает отрезок по выпуклому многоугольнику.
+    Использует алгоритм Лян-Барски для выпуклых многоугольников.
+    Возвращает (new_x1, new_y1, new_x2, new_y2) или None, если отрезок вне полигона.
+    """
+    dx = x2 - x1
+    dy = y2 - y1
+    
+    t_min = 0.0
+    t_max = 1.0
+    
+    n = len(vertices)
+    for i in range(n):
+        # Ребро полигона: от v1 к v2
+        v1 = vertices[i]
+        v2 = vertices[(i + 1) % n]
+        
+        # Внутренняя нормаль к ребру (перпендикуляр, направленный внутрь)
+        # Для выпуклого многоугольника с обходом против часовой стрелки
+        edge_x = v2[0] - v1[0]
+        edge_y = v2[1] - v1[1]
+        # Нормаль, направленная внутрь: (-edge_y, edge_x) для CCW
+        nx = -edge_y
+        ny = edge_x
+        
+        # Расстояние от точки на отрезке до ребра вдоль нормали
+        # denominator = nx * dx + ny * dy
+        denom = nx * dx + ny * dy
+        # numerator = nx * (x1 - v1[0]) + ny * (y1 - v1[1])
+        numer = nx * (x1 - v1[0]) + ny * (y1 - v1[1])
+        
+        if abs(denom) < 1e-10:
+            # Отрезок параллелен ребру
+            if numer < 0:
+                return None  # Отрезок снаружи
+            else:
+                continue  # Отрезок внутри или на границе
+        else:
+            t = -numer / denom
+            if denom > 0:
+                # Входим в полигон
+                t_min = max(t_min, t)
+            else:
+                # Выходим из полигона
+                t_max = min(t_max, t)
+            
+            if t_min > t_max:
+                return None
+    
+    if t_min > t_max:
+        return None
+    
+    cx1 = x1 + t_min * dx
+    cy1 = y1 + t_min * dy
+    cx2 = x1 + t_max * dx
+    cy2 = y1 + t_max * dy
+    
+    return (cx1, cy1, cx2, cy2)
+
+
+def generate_hex_art(gray_array, output_path, hex_size=20,
+                     min_step=2.0, max_step=20.0, angle=0.0,
+                     line_width=1.0, scale=2):
+    """
+    Генерирует изображение в сотовой структуре.
+    
+    Изображение разбивается на правильные шестиугольники.
+    Внутри каждого шестиугольника рисуются параллельные линии (штриховка).
+    Расстояние между линиями зависит от средней яркости пикселей внутри соты:
+    темнее → линии чаще (меньше шаг), светлее → линии реже (больше шаг).
+    
+    Args:
+        gray_array: np.ndarray — изображение в оттенках серого
+        output_path: str — путь для сохранения
+        hex_size: int — радиус шестиугольника в пикселях
+        min_step: float — минимальный шаг штриховки (для тёмных участков)
+        max_step: float — максимальный шаг штриховки (для светлых участков)
+        angle: float — угол наклона штриховки в градусах
+        line_width: float — толщина линии штриховки
+        scale: int — масштаб выходного изображения
+    """
+    import numpy as np
+    from PIL import Image, ImageDraw
+    import math
+    
+    h, w = gray_array.shape
+    
+    # Создаём выходное изображение (белый фон)
+    img = Image.new('L', (int(w * scale), int(h * scale)), 255)
+    draw = ImageDraw.Draw(img)
+    
+    # Параметры гексагональной решётки
+    # Шестиугольник с "flat-top" ориентацией (плоская вершина сверху)
+    R = hex_size  # радиус описанной окружности
+    r = R * math.sqrt(3) / 2  # половина высоты
+    
+    # Угол штриховки в радианах
+    angle_rad = math.radians(angle)
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
+    
+    # Вершины шестиугольника (flat-top: плоская сторона сверху)
+    # Углы: 0°, 60°, 120°, 180°, 240°, 300°
+    hex_vertices_local = []
+    for i in range(6):
+        a = math.radians(60 * i)
+        hex_vertices_local.append((R * math.cos(a), R * math.sin(a)))
+    
+    # Проходим по всем сотам, покрывающим изображение
+    # Для flat-top: шаг по x = 1.5 * R, шаг по y = sqrt(3) * R
+    dx = 1.5 * R
+    dy = math.sqrt(3) * R
+    
+    # Смещение для чётных/нечётных рядов
+    x_offset = dx / 2
+    
+    for row in range(int(h / dy) + 3):
+        for col in range(int(w / dx) + 3):
+            # Центр соты
+            cx = col * dx + (x_offset if row % 2 == 1 else 0)
+            cy = row * dy + r
+            
+            # Проверяем, что сота хотя бы частично в пределах изображения
+            if cx - R > w or cx + R < 0 or cy - R > h or cy + R < 0:
+                continue
+            
+            # Вершины соты в абсолютных координатах
+            hex_vertices_abs = [(cx + vx, cy + vy) for vx, vy in hex_vertices_local]
+            
+            # Вычисляем среднюю яркость пикселей внутри шестиугольника
+            min_x = max(0, int(cx - R))
+            max_x = min(w, int(cx + R) + 1)
+            min_y = max(0, int(cy - R))
+            max_y = min(h, int(cy + R) + 1)
+            
+            pixels = []
+            for py in range(min_y, max_y):
+                for px in range(min_x, max_x):
+                    if _point_in_convex_polygon(px, py, hex_vertices_abs):
+                        pixels.append(gray_array[py, px])
+            
+            if not pixels:
+                continue
+            
+            avg_brightness = sum(pixels) / len(pixels)
+            brightness_norm = avg_brightness / 255.0
+            
+            # Шаг штриховки: темнее → меньше шаг
+            step = min_step + (1.0 - brightness_norm) * (max_step - min_step)
+            
+            # Рисуем штриховку внутри шестиугольника
+            # Длина диагонали описанной окружности
+            diag = 2 * R
+            
+            # Направление, перпендикулярное линиям штриховки
+            perp_angle = angle_rad + math.pi / 2
+            perp_cos = math.cos(perp_angle)
+            perp_sin = math.sin(perp_angle)
+            
+            # Идём с шагом step вдоль перпендикулярного направления
+            # Начинаем от центра и идём в обе стороны
+            max_dist = diag  # максимальное расстояние от центра вдоль перпендикуляра
+            
+            dist = -max_dist
+            while dist < max_dist:
+                # Точка на линии, проходящей через центр соты,
+                # смещённая на dist вдоль перпендикулярного направления
+                mid_x = cx + dist * perp_cos
+                mid_y = cy + dist * perp_sin
+                
+                # Концы отрезка вдоль направления штриховки
+                x1 = mid_x - diag * cos_a
+                y1 = mid_y - diag * sin_a
+                x2 = mid_x + diag * cos_a
+                y2 = mid_y + diag * sin_a
+                
+                # Обрезаем отрезок по границам шестиугольника
+                clipped = _clip_line_to_polygon(x1, y1, x2, y2, hex_vertices_abs)
+                if clipped is not None:
+                    cx1, cy1, cx2, cy2 = clipped
+                    # Масштабируем
+                    sx1 = cx1 * scale
+                    sy1 = cy1 * scale
+                    sx2 = cx2 * scale
+                    sy2 = cy2 * scale
+                    draw.line([(sx1, sy1), (sx2, sy2)], fill=0, width=max(1, int(line_width)))
+                
+                dist += step
+    
+    img.save(output_path, quality=95)
+    print(f"Сохранено: {output_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Spiral Line Art Generator — одна спираль переменной толщины"

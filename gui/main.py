@@ -10,12 +10,12 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import tkinter as tk
-from gui.app import SpiralGUI
+from gui.app import MainApp
 
 
 def main():
     root = tk.Tk()
-    app = SpiralGUI(root)
+    app = MainApp(root)
     root.mainloop()
 
 
