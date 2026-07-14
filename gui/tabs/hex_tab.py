@@ -18,6 +18,7 @@ class HexTab(BaseTab):
         self.angle_var = tk.DoubleVar(value=0.0)
         self.line_width_var = tk.DoubleVar(value=1.0)
         self.scale_var = tk.IntVar(value=2)
+        self.show_grid_var = tk.BooleanVar(value=False)
         super().__init__(parent)
 
     def _build_ui(self):
@@ -73,6 +74,12 @@ class HexTab(BaseTab):
             self, from_=1, to=10, textvariable=self.scale_var, width=10
         ).grid(row=5, column=1, sticky="w", padx=5, pady=3)
 
+        # Показывать сетку
+        ttk.Checkbutton(
+            self, text="Показывать сетку шестиугольников",
+            variable=self.show_grid_var
+        ).grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=3)
+
     def generate(self, gray_array, output_path, status_callback):
         hex_size = self.hex_size_var.get()
         min_step = self.min_step_var.get()
@@ -80,6 +87,7 @@ class HexTab(BaseTab):
         angle = self.angle_var.get()
         line_width = self.line_width_var.get()
         scale = self.scale_var.get()
+        show_grid = self.show_grid_var.get()
 
         status_callback("Генерация сотовой структуры...")
         generate_hex_art(
@@ -90,6 +98,7 @@ class HexTab(BaseTab):
             angle=angle,
             line_width=line_width,
             scale=scale,
+            show_grid=show_grid,
         )
 
         return output_path

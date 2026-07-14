@@ -21,6 +21,7 @@ from PIL import Image, ImageTk
 from spiral_generator import load_and_preprocess
 from gui.tabs.spiral_tab import SpiralTab
 from gui.tabs.hex_tab import HexTab
+from gui.tabs.random_walk_tab import RandomWalkTab
 
 
 class MainApp:
@@ -82,9 +83,11 @@ class MainApp:
         self.tabs = {}
         self.tabs["spiral"] = SpiralTab(self.notebook)
         self.tabs["hex"] = HexTab(self.notebook)
+        self.tabs["random_walk"] = RandomWalkTab(self.notebook)
 
         self.notebook.add(self.tabs["spiral"], text="Спираль")
         self.notebook.add(self.tabs["hex"], text="Соты")
+        self.notebook.add(self.tabs["random_walk"], text="Random Walk")
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
         self.current_tab = self.tabs["spiral"]

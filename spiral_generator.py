@@ -152,6 +152,75 @@ def generate_archimedean_spiral(width, height, num_turns=40, points_per_turn=100
     return points
 
 
+def generate_random_walk(width, height, num_steps=2000, step_size=4.0,
+                         start_from_center=True, bias_towards_center=True,
+                         bias_strength=0.05, seed=None):
+    """
+    Генерирует путь случайного блуждания (random walk).
+    
+    Точка начинает путь из центра (или случайной позиции) и делает
+    последовательные шаги в случайных направлениях. Притяжение к центру
+    не даёт точке уйти за края изображения.
+    
+    Args:
+        width: ширина изображения
+        height: высота изображения
+        num_steps: количество шагов
+        step_size: длина одного шага в пикселях
+        start_from_center: начинать из центра (иначе — случайная точка)
+        bias_towards_center: притягивать точку к центру
+        bias_strength: сила притяжения к центру (0.0 — нет, 1.0 — сильно)
+        seed: seed для воспроизводимости (None = случайно)
+    
+    Returns:
+        list of (x, y) — точки пути
+    """
+    import random
+    
+    if seed is not None:
+        random.seed(seed)
+    
+    cx, cy = width / 2, height / 2
+    
+    if start_from_center:
+        x, y = cx, cy
+    else:
+        x = random.uniform(0, width)
+        y = random.uniform(0, height)
+    
+    points = [(x, y)]
+    
+    for _ in range(num_steps):
+        # Случайное направление
+        angle = random.uniform(0, 2 * math.pi)
+        
+        dx = math.cos(angle) * step_size
+        dy = math.sin(angle) * step_size
+        
+        # Притяжение к центру
+        if bias_towards_center:
+            dx += (cx - x) * bias_strength
+            dy += (cy - y) * bias_strength
+        
+        x += dx
+        y += dy
+        
+        # Если вышли за границы — отражаем или телепортируем к центру
+        if x < 0 or x >= width or y < 0 or y >= height:
+            if bias_towards_center:
+                # Телепортируем ближе к центру
+                x = cx + random.uniform(-width * 0.2, width * 0.2)
+                y = cy + random.uniform(-height * 0.2, height * 0.2)
+            else:
+                # Отражаем
+                x = max(0, min(width - 1, x))
+                y = max(0, min(height - 1, y))
+        
+        points.append((x, y))
+    
+    return points
+
+
 def generate_rectangular_spiral(width, height, num_turns=40, points_per_turn=100):
     """
     Генерирует прямоугольную спираль от центра к краям.
@@ -294,7 +363,7 @@ def _clip_line_to_polygon(x1, y1, x2, y2, vertices):
 
 def generate_hex_art(gray_array, output_path, hex_size=20,
                      min_step=2.0, max_step=20.0, angle=0.0,
-                     line_width=1.0, scale=2):
+                     line_width=1.0, scale=2, show_grid=False):
     """
     Генерирует изображение в сотовой структуре.
     
@@ -312,6 +381,7 @@ def generate_hex_art(gray_array, output_path, hex_size=20,
         angle: float — угол наклона штриховки в градусах
         line_width: float — толщина линии штриховки
         scale: int — масштаб выходного изображения
+        show_grid: bool — рисовать контуры шестиугольников
     """
     import numpy as np
     from PIL import Image, ImageDraw
@@ -421,6 +491,17 @@ def generate_hex_art(gray_array, output_path, hex_size=20,
                     draw.line([(sx1, sy1), (sx2, sy2)], fill=0, width=max(1, int(line_width)))
                 
                 dist += step
+            
+            # Рисуем контур шестиугольника, если нужно
+            if show_grid:
+                for i in range(6):
+                    x1, y1 = hex_vertices_abs[i]
+                    x2, y2 = hex_vertices_abs[(i + 1) % 6]
+                    sx1 = x1 * scale
+                    sy1 = y1 * scale
+                    sx2 = x2 * scale
+                    sy2 = y2 * scale
+                    draw.line([(sx1, sy1), (sx2, sy2)], fill=0, width=max(1, int(line_width)))
     
     img.save(output_path, quality=95)
     print(f"Сохранено: {output_path}")
