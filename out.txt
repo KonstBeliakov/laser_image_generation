@@ -1,0 +1,2 @@
+Сохранено: test_rect.png
+OK

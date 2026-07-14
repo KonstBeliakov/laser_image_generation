@@ -152,46 +152,65 @@ def generate_archimedean_spiral(width, height, num_turns=40, points_per_turn=100
     return points
 
 
-def generate_rectangular_spiral(width, height, step=10):
+def generate_rectangular_spiral(width, height, num_turns=40, points_per_turn=100):
     """
-    Генерирует прямоугольную спираль (как лабиринт от центра).
+    Генерирует прямоугольную спираль от центра к краям.
+    
+    Спираль строится параметрически: угол меняется от 0 до num_turns*2*pi,
+    а радиус — линейно от 0 до max_r. Форма приближается к прямоугольной
+    через преобразование окружности в прямоугольник (sup-norm).
+    
+    width: ширина изображения
+    height: высота изображения
+    num_turns: количество витков
+    points_per_turn: точек на один виток
+    
+    Возвращает список точек [(x1, y1), (x2, y2), ...]
     """
-    cx, cy = width // 2, height // 2
+    cx, cy = width / 2, height / 2
     
-    points = [(cx, cy)]
+    # Максимальный радиус по полуосям
+    max_rx = width / 2 * 0.95
+    max_ry = height / 2 * 0.95
     
-    left = cx
-    right = cx
-    top = cy
-    bottom = cy
+    points = []
+    total_points = num_turns * points_per_turn
     
-    direction = 0  # 0=право, 1=вниз, 2=влево, 3=вверх
-    step_size = step
-    
-    while len(points) < 10000:  # ограничение
-        if direction == 0:  # вправо
-            for x in range(right + 1, right + step_size + 1):
-                if x < width:
-                    points.append((x, top))
-            right += step_size
-        elif direction == 1:  # вниз
-            for y in range(top + 1, top + step_size + 1):
-                if y < height:
-                    points.append((right, y))
-            top += step_size
-        elif direction == 2:  # влево
-            for x in range(right - 1, right - step_size - 1, -1):
-                if x >= 0:
-                    points.append((x, bottom))
-            right -= step_size
-        elif direction == 3:  # вверх
-            for y in range(bottom - 1, bottom - step_size - 1, -1):
-                if y >= 0:
-                    points.append((left, y))
-            bottom -= step_size
+    for i in range(total_points):
+        t = i / total_points  # 0..1
         
-        direction = (direction + 1) % 4
-        step_size += step
+        # Угол
+        angle = t * num_turns * 2 * math.pi
+        
+        # Радиус растёт линейно
+        r_progress = t  # 0..1
+        
+        # Преобразуем окружность в прямоугольник через sup-norm:
+        #   x = r * cos(a), y = r * sin(a)
+        #   чтобы получить квадрат, нормализуем: max(|cos|, |sin|)
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        norm = max(abs(cos_a), abs(sin_a))
+        
+        if norm > 1e-10:
+            # "Скругляем" прямоугольник, чтобы углы не были слишком острыми
+            # Используем smooth-фактор: смешиваем окружность и прямоугольник
+            smooth = 0.85  # 1.0 = чистый прямоугольник, 0.0 = окружность
+            rect_cos = cos_a / norm
+            rect_sin = sin_a / norm
+            mix_cos = (1 - smooth) * cos_a + smooth * rect_cos
+            mix_sin = (1 - smooth) * sin_a + smooth * rect_sin
+        else:
+            mix_cos = cos_a
+            mix_sin = sin_a
+        
+        rx = max_rx * r_progress
+        ry = max_ry * r_progress
+        
+        x = cx + rx * mix_cos
+        y = cy + ry * mix_sin
+        
+        points.append((x, y))
     
     return points
 
@@ -216,7 +235,7 @@ def main():
     parser.add_argument("--type", choices=["archimedean", "elliptical", "rectangular"],
                         default="archimedean", help="Тип спирали")
     parser.add_argument("--step", type=int, default=10, 
-                        help="Шаг для прямоугольной спирали")
+                        help="Шаг для прямоугольной спирали (устаревший параметр)")
     
     args = parser.parse_args()
     
@@ -233,7 +252,7 @@ def main():
     elif args.type == "elliptical":
         spiral_points = generate_spiral_path(w, h, args.turns)
     elif args.type == "rectangular":
-        spiral_points = generate_rectangular_spiral(w, h, args.step)
+        spiral_points = generate_rectangular_spiral(w, h, args.turns)
     
     print(f"  Точек в спирали: {len(spiral_points)}")
     
