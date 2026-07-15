@@ -221,6 +221,59 @@ def generate_random_walk(width, height, num_steps=2000, step_size=4.0,
     return points
 
 
+def generate_multi_random_walk(width, height, num_walkers=3, num_steps=2000,
+                                step_size=4.0, bias_towards_center=True,
+                                bias_strength=0.05, seed=None):
+    """
+    Генерирует несколько случайных блужданий из разных точек и объединяет их.
+    
+    Каждый walker начинает из случайной точки и делает num_steps шагов.
+    Пути всех walker'ов объединяются в один длинный путь.
+    Это позволяет лучше покрыть изображение, особенно при большом шаге.
+    
+    Args:
+        width: ширина изображения
+        height: высота изображения
+        num_walkers: количество одновременно запущенных random walk
+        num_steps: количество шагов на один walker
+        step_size: длина одного шага в пикселях
+        bias_towards_center: притягивать точку к центру
+        bias_strength: сила притяжения к центру
+        seed: seed для воспроизводимости
+    
+    Returns:
+        list of (x, y) — объединённый путь всех walker'ов
+    """
+    import random
+    
+    all_points = []
+    
+    for i in range(num_walkers):
+        # Каждый walker получает свой seed (если задан общий)
+        walker_seed = None
+        if seed is not None:
+            walker_seed = seed + i * 1000
+        
+        # Генерируем random walk из случайной начальной точки
+        walker_points = generate_random_walk(
+            width, height,
+            num_steps=num_steps,
+            step_size=step_size,
+            start_from_center=False,  # Всегда из случайной точки
+            bias_towards_center=bias_towards_center,
+            bias_strength=bias_strength,
+            seed=walker_seed,
+        )
+        
+        # Добавляем точки в общий путь
+        if all_points:
+            # Соединяем с предыдущим путём (добавляем точку перехода)
+            all_points.append(walker_points[0])
+        all_points.extend(walker_points)
+    
+    return all_points
+
+
 def generate_rectangular_spiral(width, height, num_turns=40, points_per_turn=100):
     """
     Генерирует прямоугольную спираль от центра к краям.
